@@ -4,6 +4,28 @@ from openpyxl import Workbook
 from datetime import datetime
 from sql_file_list_MS import file_list
 from db_config import LSH_CONFIG, MFS_CONFIG, load_environment
+from openpyxl.utils.exceptions import IllegalCharacterError
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+import re
+
+def sanitize_cell(value):
+    if isinstance(value, str):
+        return ILLEGAL_CHARACTERS_RE.sub("", value)
+    return value
+
+
+def sanitize_excel_value(val, max_length=300):
+    if isinstance(val, str):
+        # Remove characters that are illegal in XML (which Excel uses)
+        val = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F]', '', val)
+        
+        # Remove non-BMP Unicode characters (e.g., certain emoji)
+        val = ''.join(c for c in val if ord(c) <= 0xFFFF)
+        
+        # Truncate if it's too long
+        if len(val) > max_length:
+            val = val[:max_length] + '... [truncated]'
+    return val
 
 start_time = datetime.now()
 
@@ -54,14 +76,12 @@ for sql_file_path in sql_files:
         continue
 
     print(f"\n📄 Verifying file: {sql_file_path}")
-    ws_data = wb.create_sheet(title=sql_file_name[:31])
-
+    
+    # Mapping for each (file, table)
     results_map = {}
     queries_data = {}
-    column_names_retained = []
-    column_names_expected = []
-    i = 0
 
+    i = 0
     while i < len(lines):
         if lines[i].strip().startswith("--"):
             label_line = lines[i].strip()[2:].strip()
@@ -95,23 +115,28 @@ for sql_file_path in sql_files:
                     count = len(rows)
                     print(f"[✓] {label.upper()} → {count}")
 
-                    if (sql_file_name, table_names) not in results_map:
-                        results_map[(sql_file_name, table_names)] = {
+                    key = (sql_file_name, table_names)
+                    if key not in results_map:
+                        results_map[key] = {
                             "residual_check": None,
                             "retained_count": None,
-                            "expected_count": None
+                            "expected_count": None,
+                            "retained_rows": [],
+                            "expected_rows": [],
+                            "retained_columns": [],
+                            "expected_columns": []
                         }
 
                     if 'residual' in label:
-                        results_map[(sql_file_name, table_names)]["residual_check"] = count
+                        results_map[key]["residual_check"] = count
                     elif 'retained' in label:
-                        results_map[(sql_file_name, table_names)]["retained_count"] = count
-                        queries_data['retained'] = list(rows)
-                        column_names_retained = [desc[0] + "_retained" for desc in cursor.description]
+                        results_map[key]["retained_count"] = count
+                        results_map[key]["retained_rows"] = list(rows)
+                        results_map[key]["retained_columns"] = [desc[0] for desc in cursor.description]
                     elif 'expected' in label:
-                        results_map[(sql_file_name, table_names)]["expected_count"] = count
-                        queries_data['expected'] = list(rows)
-                        column_names_expected = [desc[0] + "_expected" for desc in cursor.description]
+                        results_map[key]["expected_count"] = count
+                        results_map[key]["expected_rows"] = list(rows)
+                        results_map[key]["expected_columns"] = [desc[0] for desc in cursor.description]
 
             except Exception as e:
                 print(f"[X] Error in {label.upper()} → {e}")
@@ -127,25 +152,28 @@ for sql_file_path in sql_files:
         else:
             i += 1
 
-    for (sql_file, table), counts in results_map.items():
-        residual = counts["residual_check"]
-        retained = counts["retained_count"]
-        expected = counts["expected_count"]
+    for (sql_file, table), data in results_map.items():
+        residual = data["residual_check"]
+        retained = data["retained_count"]
+        expected = data["expected_count"]
+        retained_rows = data["retained_rows"]
+        expected_rows = data["expected_rows"]
+        column_names_retained = [c + "_retained" for c in data["retained_columns"]]
+        column_names_expected = [c + "_expected" for c in data["expected_columns"]]
 
-        residual_status = "PASS" if residual == 0 else "FAIL"
+        safe_sheet_name = re.sub(r'[\\/*?:[\]]', "", sql_file[:25])  # Excel sheet naming limit
+        if len(wb.sheetnames) >= 1:
+            safe_sheet_name += f"_{len(wb.sheetnames)}"
 
-        retained_rows = queries_data.get("retained", [])
-        expected_rows = queries_data.get("expected", [])
+        ws_data = wb.create_sheet(title=safe_sheet_name)
 
         mismatch_count = 0
 
         interleaved_column_names = ["Overall Status"]
         for r_col, e_col in zip(column_names_retained, column_names_expected):
             col_base = r_col.replace("_retained", "")
-            interleaved_column_names.append(f"{col_base}_status")
-            interleaved_column_names.append(r_col)
-            interleaved_column_names.append(e_col)
-        ws_data.append(interleaved_column_names)
+            interleaved_column_names.extend([f"{col_base}_status", r_col, e_col])
+        ws_data.append([sanitize_cell(c) for c in interleaved_column_names])
 
         base_col_names = [col.replace("_retained", "") for col in column_names_retained]
         key_indexes = [0] + [i for i, name in enumerate(base_col_names) if 'id' in name.lower()]
@@ -155,7 +183,6 @@ for sql_file_path in sql_files:
 
         retained_dict = {row_to_key(row, key_indexes): row for row in retained_rows}
         expected_dict = {row_to_key(row, key_indexes): row for row in expected_rows}
-
         all_keys = set(retained_dict.keys()).union(expected_dict.keys())
 
         for key in all_keys:
@@ -165,48 +192,44 @@ for sql_file_path in sql_files:
             is_retained_missing = all(v == "" for v in retained_row)
             is_expected_missing = all(v == "" for v in expected_row)
 
-            if is_retained_missing or is_expected_missing:
-                interleaved_row = ["MISSING"]
-            else:
-                interleaved_row = ["PASS"]
+            interleaved_row = ["MISSING"] if is_retained_missing or is_expected_missing else ["PASS"]
 
             for r_val, e_val in zip(retained_row, expected_row):
-                status = "matched" if r_val == e_val else "mismatched"
+                r_str = str(r_val).strip().lower() if isinstance(r_val, str) else str(r_val).strip()
+                e_str = str(e_val).strip().lower() if isinstance(e_val, str) else str(e_val).strip()
+
+                status = "matched" if r_str == e_str else "mismatched"
                 if status == "mismatched" and interleaved_row[0] == "PASS":
                     interleaved_row[0] = "FAIL"
                     mismatch_count += 1
-                interleaved_row.append(status)
-                interleaved_row.append(r_val)
-                interleaved_row.append(e_val)
+                interleaved_row.extend([status, r_val, e_val])
 
             total_rows_verified += 1
-            ws_data.append(interleaved_row)
+            try:
+                ws_data.append([sanitize_excel_value(c) for c in interleaved_row])
+            except IllegalCharacterError as e:
+                print(f"⚠️ Illegal character in Excel row for file {sql_file_name}: {e}")
 
-        if (retained and expected):
+        if retained and expected:
             total_columns_verified += len(base_col_names)
 
-        if (retained is None or retained == 0) and (expected is None or expected == 0):
-            data_integrity_display = "No Data Fetched"
-        elif retained != expected:
-            data_integrity_display = f"{abs(retained - expected)} data affected"
-        elif mismatch_count == 0:
-            data_integrity_display = "PASS"
-        else:
-            data_integrity_display = f"{mismatch_count} mismatches found"
+        data_integrity_display = (
+            "No Data Fetched" if (retained == expected == None or (retained == 0 and expected == 0)) else
+            "PASS" if mismatch_count == 0 and retained == expected else
+            f"{mismatch_count} mismatches found" if mismatch_count else
+            f"{abs(retained - expected)} data affected"
+        )
 
         retained_expected_status = "PASS" if mismatch_count == 0 and retained == expected else "FAIL"
+        residual_status = "PASS" if residual == 0 else "FAIL"
 
-        if data_integrity_display == "No Data Fetched" and residual_status == "PASS" and retained_expected_status == "PASS":
-            overall_result = "PASS"
-        else:
-            overall_result = "FAIL" if any([
-                residual_status != "PASS",
-                retained_expected_status != "PASS",
-                data_integrity_display != "PASS"
-            ]) else "PASS"
+        overall_result = "PASS" if (
+            residual_status == "PASS" and
+            mismatch_count == 0 and
+            retained == expected
+        ) else "FAIL"
 
         timestamp_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
         ws_summary.append([
             overall_result, sql_file, table,
             residual if residual is not None else "",
@@ -225,7 +248,6 @@ CONFIG_NAME = "LSH" if CONFIG == LSH_CONFIG else "MFS"
 output_file = os.path.join(results_dir, f"{CONFIG_NAME}_query_results_{timestamp}.xlsx")
 wb.save(output_file)
 
-# Log final metrics
 duration = datetime.now() - start_time
 total_seconds = duration.total_seconds()
 milliseconds = int((total_seconds - int(total_seconds)) * 1000)

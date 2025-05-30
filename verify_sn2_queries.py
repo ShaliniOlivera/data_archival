@@ -4,20 +4,24 @@ from openpyxl import Workbook
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Font
 from datetime import datetime
-from db_config import load_environment, LSH_CONFIG  # or MFS_CONFIG
+from db_config import load_environment, MFS_CONFIG, LSH_CONFIG
 from sql_file_list_SN2 import file_list
 
-# Configuration
-BU = 'sn2_lsh'
-queries_dir = "queries_sn2"
-results_dir = "results_sn2"
+BU = 'MFS_CONFIG'
 
-start_time = datetime.now()
+ENV_MAP = {
+    'MFS_CONFIG': MFS_CONFIG,
+    'LSH_CONFIG': LSH_CONFIG
+}
+queries_dir = f"queries_sn2"
+results_dir = f"results_sn2"
 
-env = load_environment(LSH_CONFIG)  # change to MFS_CONFIG if needed
+env = load_environment(ENV_MAP[BU])
 source_connection = env["source_connection"]
 archived_connection = env["archived_connection"]
 placeholders = env["placeholders"]
+
+start_time = datetime.now()
 
 wb = Workbook(write_only=True)
 ws_summary = wb.create_sheet(title="Verification Results")
@@ -36,7 +40,6 @@ ws_summary.append([
 
 sql_files = []
 missing_files = []
-
 for f in file_list:
     full_path = os.path.join(queries_dir, f)
     if not os.path.isfile(full_path):
@@ -50,7 +53,6 @@ if missing_files:
         print(f"   - {mf}")
     raise FileNotFoundError("One or more SQL files are missing. Please check the 'queries' folder.")
 
-# ✅ Totals initialization
 total_rows_verified = 0
 total_columns_verified = 0
 
@@ -65,7 +67,6 @@ for sql_file_path in sql_files:
         continue
 
     print(f"\n📄 Verifying file: {sql_file_path}")
-
     ws_data = wb.create_sheet(title=sql_file_name[:31])
 
     results_map = {}
@@ -91,7 +92,6 @@ for sql_file_path in sql_files:
                 i += 1
             sql_query = ''.join(sql_lines).strip()
 
-            # Replace all placeholders dynamically
             for placeholder, value in placeholders.items():
                 sql_query = sql_query.replace(f"{{{placeholder}}}", value)
 
@@ -153,6 +153,7 @@ for sql_file_path in sql_files:
         expected_rows = queries_data.get("expected", [])
 
         mismatch_count = 0
+        missing_count = 0  # ✅ Initialize here to avoid NameError
 
         interleaved_column_names = ["Overall Status"]
         for r_col, e_col in zip(column_names_retained, column_names_expected):
@@ -174,20 +175,31 @@ for sql_file_path in sql_files:
         all_keys = set(retained_dict.keys()).union(expected_dict.keys())
 
         for key in all_keys:
-            retained_row = retained_dict.get(key, [""] * len(column_names_retained))
-            expected_row = expected_dict.get(key, [""] * len(column_names_expected))
+            retained_row = retained_dict.get(key)
+            expected_row = expected_dict.get(key)
 
-            is_retained_missing = all(v == "" for v in retained_row)
-            is_expected_missing = all(v == "" for v in expected_row)
+            row_status = "PASS"
+            interleaved_row = []
 
-            if is_retained_missing or is_expected_missing:
-                interleaved_row = ["MISSING"]
-            else:
-                interleaved_row = ["PASS"]
+            if retained_row is None and expected_row is not None:
+                row_status = "MISSING IN RETAINED"
+                missing_count += 1
+                retained_row = [""] * len(column_names_retained)
+
+            elif expected_row is None and retained_row is not None:
+                row_status = "MISSING IN EXPECTED"
+                missing_count += 1
+                expected_row = [""] * len(column_names_expected)
+
+            elif retained_row and expected_row:
+                row_status = "PASS"
+
+            interleaved_row.append(row_status)
 
             for r_val, e_val in zip(retained_row, expected_row):
                 status = "matched" if r_val == e_val else "mismatched"
-                if status == "mismatched" and interleaved_row[0] == "PASS":
+                if status == "mismatched" and row_status == "PASS":
+                    row_status = "FAIL"
                     interleaved_row[0] = "FAIL"
                     mismatch_count += 1
                 interleaved_row.append(status)
@@ -197,19 +209,26 @@ for sql_file_path in sql_files:
             total_rows_verified += 1
             ws_data.append(interleaved_row)
 
+
+
         if (retained and expected):
             total_columns_verified += len(base_col_names)
 
         if (retained is None or retained == 0) and (expected is None or expected == 0):
             data_integrity_display = "No Data Fetched"
-        elif retained != expected:
-            data_integrity_display = f"{abs(retained - expected)} data affected"
-        elif mismatch_count == 0:
+        elif mismatch_count == 0 and missing_count == 0 and retained == expected:
             data_integrity_display = "PASS"
         else:
-            data_integrity_display = f"{mismatch_count} mismatches found"
+            issues = []
+            if mismatch_count > 0:
+                issues.append(f"{mismatch_count} mismatches")
+            if missing_count > 0:
+                issues.append(f"{missing_count} missing rows")
+            if retained != expected:
+                issues.append(f"{abs(retained - expected)} row count diff")
+            data_integrity_display = ", ".join(issues)
 
-        retained_expected_status = "PASS" if mismatch_count == 0 and retained == expected else "FAIL"
+        retained_expected_status = "PASS" if mismatch_count == 0 and missing_count == 0 and retained == expected else "FAIL"
 
         if data_integrity_display == "No Data Fetched" and residual_status == "PASS" and retained_expected_status == "PASS":
             overall_result = "PASS"
@@ -235,13 +254,11 @@ for sql_file_path in sql_files:
             timestamp_str
         ])
 
-# Save workbook
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 os.makedirs(results_dir, exist_ok=True)
 output_file = os.path.join(results_dir, f"{BU}_query_results_{timestamp}.xlsx")
 wb.save(output_file)
 
-# Summary
 duration = datetime.now() - start_time
 total_seconds = duration.total_seconds()
 milliseconds = int((total_seconds - int(total_seconds)) * 1000)

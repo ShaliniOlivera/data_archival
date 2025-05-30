@@ -5,8 +5,9 @@ INNER JOIN {ARCHIVED_SN2_DB}.user us ON us.id = noti.fk_user
 INNER JOIN {ARCHIVED_SN2_DB}.child_relation cr ON cr.fk_user = us.id
 INNER JOIN {ARCHIVED_SN2_DB}.parent pa ON pa.id = cr.fk_parent
 INNER JOIN {ARCHIVED_SN2_DB}.child ch ON ch.id = cr.fk_child
-WHERE ch.birth_certificate IN(
-SELECT darch.birth_certificate FROM {ARCHIVED_SN2_DB}.dar_child_archival_delete_unique_map darch
+WHERE ch.id IN(
+SELECT darch.fk_child FROM {ARCHIVED_SN2_DB}.dar_child_archival_delete_unique_map darch
+WHERE ch.id = darch.fk_child
 );
 
 -- retained_count
@@ -24,6 +25,7 @@ INNER JOIN {SOURCE_SN2_DB}.user us ON us.id = noti.fk_user
 INNER JOIN {SOURCE_SN2_DB}.child_relation cr ON cr.fk_user = us.id
 INNER JOIN {SOURCE_SN2_DB}.parent pa ON pa.id = cr.fk_parent
 INNER JOIN {SOURCE_SN2_DB}.child ch ON ch.id = cr.fk_child
-WHERE ch.birth_certificate NOT IN(
-SELECT darch.birth_certificate FROM {ARCHIVED_SN2_DB}.dar_child_archival_delete_unique_map darch
+WHERE ch.id NOT IN(
+SELECT darch.fk_child FROM {ARCHIVED_SN2_DB}.dar_child_archival_delete_unique_map darch
+WHERE ch.id = darch.fk_child
 );
