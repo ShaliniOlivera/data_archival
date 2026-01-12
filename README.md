@@ -39,6 +39,7 @@ Steps:
 4.2 discrepancies will be displayed in the summary wether the cause is missing records or mismatch in records
 4.3 the .sql file must each have the following commented out "-- residual_check", "-- retained_count", "-- expected_count_for_retention" and below each is the identical table name. otherwise, the result will show multiple rows
     *note that "count" is just a naming convention that was never changed but the script is not just verifying the count
+    *if there is no additional tables or nothing has been added to MS migration yet at the time of archival, for verification, then no need to update any of the existing sql scripts
 4.4 "-- residual_check" query for the source database to check if everything from the tmp table for archival are all removed (result should always be 0)
 4.5 "-- retained_count" query for the archived database to get what are actually retained
 4.6 "-- expected_count_for_retention" query to get what are expected to be retained
