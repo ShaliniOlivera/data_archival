@@ -21,6 +21,8 @@ sql_file_list_EP.py - contains the list of ".sql" files to be verified at a time
 sql_file_list_MS.py - contains the list of ".sql" files to be verified at a time for MS modules
 sql_file_list_SN2.py - contains the list of ".sql" files to be verified at a time for Monolith modules
 
+db_config.py - contains the databases to be used. note that the scripts should be replaced with the variable names declared in the db_config for ease of rerunning in case of switch of database e.g "{ARCHIVED_SN2_DB}"
+
 Steps:
     1. Manually verify the correctness and completeness of the following tables:
         - child, parent, child_relation
@@ -32,7 +34,7 @@ Steps:
 
 4. KEY NOTES:
 
-4.1 the script treats ID as unique and base each record verification on the unique id
+4.1 the script treats ID as unique and base each record verification on the unique id. in the event that there needs to be multiple IDs, rename the other ones
 4.2 discrepancies will be displayed in the summary wether the cause is missing records or mismatch in records
 4.3 the .sql file must each have the following commented out "-- residual_check", "-- retained_count", "-- expected_count_for_retention" and below each is the identical table name. otherwise, the result will show multiple rows
 4.4 "-- residual_check" query for the source database to check if everything from the tmp table for archival are all removed (result should always be 0)
