@@ -1,9 +1,40 @@
-what this does:
+1. WHAT IS DATA ARCHIVAL?
 
-verify the discrepancies between the csv (path /csv) and the records pulled from the database based on the queries stored in the .sql file (path /sql)
-this can verify multiple csv vs sql queries in one execution
-after verification, it will export the result in a .xlsx file (destination is in the path /results) 3.1 file name is going to be "csv_vs_db_comparison_results_" 3.2 .xlsx file will contain 2 tabs | Processed , Discrepancies
-Verification scope:
+Activity where Vision squad archives data until certain year. Making the "Archived" DB contain only those that are LEFT from archival process.
 
-treats ID as unique and base each record verification on the unique id
-discrepancies in terms of 2.1 missing value per record/column 2.2 missing id in the csv 2.3 missing id in the db
+2. WHAT THE MAIN SCRIPTS DO:
+
+verify the discrepancies between databases - source (original data) and archived (contains only retained data after archival)
+
+this can verify multiple tables from monolith, MS, and EP.
+
+after verification, it will export the result in a .xlsx file that will contain multiple tabs | Summary , tabs for each tables executed
+
+3. HOW TO USE THE FRAMEWORK:
+Depending on which BU or architecture we need to test, we need to update the following:
+
+queries_ep - folder that contains all queries for ep (.sql)
+queries_ms - folder that contains all queries for for MS modules (.sql)
+queries_sn2 - folder that contains all queries for Monolith modules (.sql)
+
+sql_file_list_EP.py - contains the list of ".sql" files to be verified at a time for EP
+sql_file_list_MS.py - contains the list of ".sql" files to be verified at a time for MS modules
+sql_file_list_SN2.py - contains the list of ".sql" files to be verified at a time for Monolith modules
+
+Steps:
+    1. Manually verify the correctness and completeness of the following tables:
+        - child, parent, child_relation
+    2. Once everything is clear on step 1, can now proceed to updating this framework for all necessary data verification (queries, file_list)
+    3. to run, open terminal (type in "python3 <file to be executed>). below are the files to be executed depending on BU and architecture:
+         - verify_ep_queries.py
+         - verify_ms_queries.py
+         - verify_sn2_queries.py
+
+4. KEY NOTES:
+
+4.1 the script treats ID as unique and base each record verification on the unique id
+4.2 discrepancies will be displayed in the summary wether the cause is missing records or mismatch in records
+4.3 the .sql file must each have the following commented out "-- residual_check", "-- retained_count", "-- expected_count_for_retention" and below each is the identical table name. otherwise, the result will show multiple rows
+4.4 "-- residual_check" query for the source database to check if everything from the tmp table for archival are all removed (result should always be 0)
+4.5 "-- retained_count" query for the archived database to get what are actually retained
+4.6 "-- expected_count_for_retention" query to get what are expected to be retained

@@ -2,7 +2,7 @@ file_list = [
 ############ cycle 1
 # "accpac_posting_childScope.sql",
 # "accpac_posting_registrationChildScope.sql",
-# "address.sql",
+"address.sql",
 # "attendance.sql",
 # "bank_account.sql",
 # "bankAccountAttribute_stateHistory.sql",
@@ -116,15 +116,15 @@ file_list = [
 # "lead.sql",
 # "waitlist_tag.sql",
 ############### cycle 11
-"receipt_audit_log_fkChild.sql",
-"receipt_audit_log_fkRegistrationChild.sql",
-"receipt_fkChild.sql",
-"receipt_fkRegistrationChild.sql",
-"receipt_offset_payment_source_ch.sql",
-"receipt_offset_payment_source_re.sql",
-"refund.sql",
-"refund_child_balance_fkChild.sql",
-"refund_child_balance_fkRegistrationChild.sql",
+# "receipt_audit_log_fkChild.sql",
+# "receipt_audit_log_fkRegistrationChild.sql",
+# "receipt_fkChild.sql",
+# "receipt_fkRegistrationChild.sql",
+# "receipt_offset_payment_source_ch.sql",
+# "receipt_offset_payment_source_re.sql",
+# "refund.sql",
+# "refund_child_balance_fkChild.sql",
+# "refund_child_balance_fkRegistrationChild.sql",
 ############## cycle 12 large dataset
 # "notification_archive.sql", # run later. very large dataset
 # "notification.sql", # run later. very large dataset,
