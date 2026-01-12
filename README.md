@@ -27,7 +27,8 @@ Steps:
     1. Manually verify the correctness and completeness of the following tables:
         - child, parent, child_relation
     2. Once everything is clear on step 1, can now proceed to updating this framework for all necessary data verification (queries, file_list)
-    3. to run, open terminal (type in "python3 <file to be executed>). below are the files to be executed depending on BU and architecture:
+    3. Update the BU or CONFIG part in the main ppython file depending on the BU to be tested (MFS/LSH)
+    4. to run, open terminal (type in "python3 <file to be executed>"). below are the files to be executed depending on BU and architecture:
          - verify_ep_queries.py
          - verify_ms_queries.py
          - verify_sn2_queries.py
@@ -37,6 +38,7 @@ Steps:
 4.1 the script treats ID as unique and base each record verification on the unique id. in the event that there needs to be multiple IDs, rename the other ones
 4.2 discrepancies will be displayed in the summary wether the cause is missing records or mismatch in records
 4.3 the .sql file must each have the following commented out "-- residual_check", "-- retained_count", "-- expected_count_for_retention" and below each is the identical table name. otherwise, the result will show multiple rows
+    *note that "count" is just a naming convention that was never changed but the script is not just verifying the count
 4.4 "-- residual_check" query for the source database to check if everything from the tmp table for archival are all removed (result should always be 0)
 4.5 "-- retained_count" query for the archived database to get what are actually retained
 4.6 "-- expected_count_for_retention" query to get what are expected to be retained
